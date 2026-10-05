@@ -1,7 +1,7 @@
 from pathlib import Path
-import subprocess
 import sys
 import tomllib
+from .runners.local import build_local
 
 
 def get_host_platform():
@@ -53,19 +53,4 @@ def build(target=None):
         print("A remote/platform runner is required.")
         return
 
-    print("Building...")
-
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "PyInstaller",
-            "--onefile",
-            "--name",
-            name,
-            str(entry),
-        ],
-        check=True,
-    )
-
-    print("Build complete!")
+    build_local(name, entry)
