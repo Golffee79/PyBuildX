@@ -1,4 +1,5 @@
 import json
+import os
 import time
 import uuid
 from pathlib import Path
@@ -6,15 +7,21 @@ from pathlib import Path
 from .virtualbox import start_vm
 
 
-RUNNER_DIR = Path.home() / "pybuildx" / "runner"
+RUNNER_DIR = Path(
+    os.environ.get(
+        "PYBUILDX_HOST_RUNNER_DIR",
+        str(Path.home() / "pybuildx" / "runner"),
+    )
+)
 REQUEST = RUNNER_DIR / "request.json"
 STATUS = RUNNER_DIR / "status.json"
 
 
-def build_windows(name, entry, requirements=None, build_options=None):
+def build_windows(name, entry, requirements=None, build_options=None, release=False):
     print("Preparing Windows runner...")
 
-    start_vm("D365")
+    vm_name = os.environ.get("PYBUILDX_WINDOWS_VM", "D365")
+    start_vm(vm_name)
 
     project_path = Path.cwd().resolve()
 
@@ -25,8 +32,9 @@ def build_windows(name, entry, requirements=None, build_options=None):
             "Project must currently be located inside your home directory."
         )
 
-    job_id = uuid.uuid4().hex
+    RUNNER_DIR.mkdir(parents=True, exist_ok=True)
 
+    job_id = uuid.uuid4().hex
     job = {
         "job_id": job_id,
         "project_dir": project_dir,
@@ -34,17 +42,12 @@ def build_windows(name, entry, requirements=None, build_options=None):
         "entry": str(entry),
         "requirements": requirements,
         "build": build_options or {},
+        "release": release,
     }
 
     STATUS.unlink(missing_ok=True)
-
     temp_request = REQUEST.with_suffix(".tmp")
-
-    temp_request.write_text(
-        json.dumps(job, indent=2),
-        encoding="utf-8",
-    )
-
+    temp_request.write_text(json.dumps(job, indent=2), encoding="utf-8")
     temp_request.replace(REQUEST)
 
     print(f"Job: {job_id}")
@@ -59,9 +62,7 @@ def build_windows(name, entry, requirements=None, build_options=None):
             continue
 
         try:
-            status = json.loads(
-                STATUS.read_text(encoding="utf-8")
-            )
+            status = json.loads(STATUS.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             time.sleep(1)
             continue
@@ -76,16 +77,13 @@ def build_windows(name, entry, requirements=None, build_options=None):
             last_message = message
 
         state = status.get("state")
-
         if state == "building":
             time.sleep(1)
             continue
-
         if state == "success":
             print("Windows build complete!")
             print(f"Artifact: {status['artifact']}")
             return
-
         if state == "failed":
             raise RuntimeError(
                 f"Windows build failed: {status.get('error')}"

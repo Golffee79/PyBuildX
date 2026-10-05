@@ -8,11 +8,14 @@ def init_project():
         print("pybuildx.toml already exists")
         return
 
-    content = """[project]
-name = "MyApp"
-entry = "main.py"
-"""
+    sections = [
+        '[project]\nname = "MyApp"\nentry = "main.py"',
+    ]
 
-    config_file.write_text(content)
+    if Path("requirements.txt").exists():
+        sections.append('[dependencies]\nrequirements = "requirements.txt"')
+
+    sections.append('[build]\nonefile = true\nwindowed = true')
+    config_file.write_text("\n\n".join(sections) + "\n", encoding="utf-8")
 
     print("Created pybuildx.toml")

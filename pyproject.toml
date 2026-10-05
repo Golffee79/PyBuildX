@@ -4,8 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pybuildx"
-version = "0.0.1"
-description = "Build Python applications with one command"
+version = "0.0.2"
+description = "Build Python applications across Linux and Windows with one command"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "pyinstaller"

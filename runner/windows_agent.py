@@ -1,20 +1,25 @@
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import time
 from pathlib import Path
 
 
-SHARE = Path(r"\\VBOXSVR\gf-2417")
-RUNNER_DIR = SHARE / "pybuildx" / "runner"
+SHARE = Path(os.environ.get("PYBUILDX_SHARE", r"\\VBOXSVR\gf-2417"))
+RUNNER_DIR = Path(
+    os.environ.get("PYBUILDX_RUNNER_DIR", str(SHARE / "pybuildx" / "runner"))
+)
 REQUEST = RUNNER_DIR / "request.json"
 STATUS = RUNNER_DIR / "status.json"
 
-BUILDER = Path(r"C:\pybuildx-builder")
+BUILDER = Path(os.environ.get("PYBUILDX_BUILDER_ROOT", r"C:\pybuildx-builder"))
 BOOTSTRAP_PYTHON = BUILDER / ".venv" / "Scripts" / "python.exe"
 WORK = BUILDER / "work"
 ENVS = BUILDER / "envs"
+
+IGNORED_DIRS = {"build", "dist", ".git", ".venv", "__pycache__"}
 
 
 def write_status(job_id, state="building", message=None, **extra):
@@ -74,30 +79,56 @@ def ensure_environment(job_id, project_dir, job_dir, requirements):
     return python
 
 
+def ignored(relative_path):
+    if any(part in IGNORED_DIRS for part in relative_path.parts):
+        return True
+    return relative_path.suffix == ".spec"
+
+
+def sync_project(source, destination):
+    """Mirror source while preserving PyInstaller build/dist caches."""
+    destination.mkdir(parents=True, exist_ok=True)
+    source_files = set()
+
+    for src in source.rglob("*"):
+        relative = src.relative_to(source)
+        if ignored(relative):
+            continue
+        target = destination / relative
+        if src.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        source_files.add(relative)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, target)
+
+    for target in sorted(destination.rglob("*"), reverse=True):
+        relative = target.relative_to(destination)
+        if not relative.parts:
+            continue
+        if relative.parts[0] in {"build", "dist"} or relative.suffix == ".spec":
+            continue
+        if target.is_file() and relative not in source_files:
+            target.unlink()
+        elif target.is_dir():
+            try:
+                target.rmdir()
+            except OSError:
+                pass
+
+
 def pyinstaller_command(python, name, entry, options):
-    command = [str(python), "-m", "PyInstaller", "--noconfirm", "--clean"]
-
-    if options.get("onefile", True):
-        command.append("--onefile")
-    else:
-        command.append("--onedir")
-
-    if options.get("windowed", True):
-        command.append("--windowed")
-    else:
-        command.append("--console")
-
+    command = [str(python), "-m", "PyInstaller", "--noconfirm"]
+    command.append("--onefile" if options.get("onefile", True) else "--onedir")
+    command.append("--windowed" if options.get("windowed", True) else "--console")
     command += ["--name", name]
 
     for module in options.get("collect_submodules", []):
         command += ["--collect-submodules", module]
-
     for package in options.get("collect_all", []):
         command += ["--collect-all", package]
-
     for hidden_import in options.get("hidden_imports", []):
         command += ["--hidden-import", hidden_import]
-
     for data in options.get("add_data", []):
         command += ["--add-data", data]
 
@@ -112,29 +143,23 @@ def build_job(job):
     entry = job["entry"]
     requirements = job.get("requirements")
     options = job.get("build", {})
+    release = bool(job.get("release", False))
 
     source = SHARE / project_dir
-    job_dir = WORK / project_dir
+    mode = "release" if release else "dev"
+    job_dir = WORK / project_dir / mode
 
     print()
     print(f"Project: {project_dir}")
+    print(f"Mode: {mode}")
     print(f"Source: {source}")
 
-    if job_dir.exists():
-        shutil.rmtree(job_dir)
-
-    write_status(job_id, message="Copying project to Windows...")
-    shutil.copytree(
-        source,
-        job_dir,
-        ignore=shutil.ignore_patterns(
-            "build", "dist", ".git", ".venv", "__pycache__", "*.spec"
-        ),
-    )
+    write_status(job_id, message="Syncing project to Windows build cache...")
+    sync_project(source, job_dir)
 
     python = ensure_environment(job_id, project_dir, job_dir, requirements)
 
-    write_status(job_id, message="Building Windows executable with PyInstaller...")
+    write_status(job_id, message="Building Windows executable with PyInstaller cache...")
     subprocess.run(
         pyinstaller_command(python, name, entry, options),
         cwd=job_dir,

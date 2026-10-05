@@ -9,17 +9,14 @@ from .runners.windows import build_windows
 def get_host_platform():
     if sys.platform.startswith("linux"):
         return "linux"
-
     if sys.platform.startswith("win"):
         return "windows"
-
     if sys.platform == "darwin":
         return "macos"
-
     return "unknown"
 
 
-def build(target=None):
+def build(target=None, release=False):
     config_path = Path("pybuildx.toml")
 
     if not config_path.exists():
@@ -32,7 +29,7 @@ def build(target=None):
 
     project = config["project"]
     dependencies = config.get("dependencies", {})
-    build_options = config.get("build", {})
+    build_options = dict(config.get("build", {}))
 
     name = project["name"]
     entry = Path(project["entry"])
@@ -47,17 +44,25 @@ def build(target=None):
         return
 
     host = get_host_platform()
-
     if target is None:
         target = host
 
+    mode = "release" if release else "dev"
     print(f"Project: {name}")
     print(f"Entry: {entry}")
     print(f"Host: {host}")
     print(f"Target: {target}")
+    print(f"Mode: {mode}")
+
+    # Development builds favor speed and incremental rebuilds.
+    # Release builds honor the project's configured onefile setting (default: true).
+    if release:
+        build_options["onefile"] = build_options.get("onefile", True)
+    else:
+        build_options["onefile"] = False
 
     if target == host:
-        build_local(name, entry)
+        build_local(name, entry, build_options=build_options)
         return
 
     if host == "linux" and target == "windows":
@@ -66,6 +71,7 @@ def build(target=None):
             entry,
             requirements=requirements,
             build_options=build_options,
+            release=release,
         )
         return
 

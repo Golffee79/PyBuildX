@@ -6,5 +6,4 @@ dist/
 *.spec
 *.egg-info/
 runner/request.json
-runner/request.json
 runner/status.json
