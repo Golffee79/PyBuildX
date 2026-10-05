@@ -31,12 +31,19 @@ def build(target=None):
         config = tomllib.load(file)
 
     project = config["project"]
+    dependencies = config.get("dependencies", {})
+    build_options = config.get("build", {})
 
     name = project["name"]
     entry = Path(project["entry"])
+    requirements = dependencies.get("requirements")
 
     if not entry.exists():
         print(f"Error: {entry} not found")
+        return
+
+    if requirements and not Path(requirements).exists():
+        print(f"Error: requirements file not found: {requirements}")
         return
 
     host = get_host_platform()
@@ -54,7 +61,12 @@ def build(target=None):
         return
 
     if host == "linux" and target == "windows":
-        build_windows(name, entry)
+        build_windows(
+            name,
+            entry,
+            requirements=requirements,
+            build_options=build_options,
+        )
         return
 
     print()

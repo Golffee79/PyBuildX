@@ -11,7 +11,7 @@ REQUEST = RUNNER_DIR / "request.json"
 STATUS = RUNNER_DIR / "status.json"
 
 
-def build_windows(name, entry):
+def build_windows(name, entry, requirements=None, build_options=None):
     print("Preparing Windows runner...")
 
     start_vm("D365")
@@ -32,6 +32,8 @@ def build_windows(name, entry):
         "project_dir": project_dir,
         "name": name,
         "entry": str(entry),
+        "requirements": requirements,
+        "build": build_options or {},
     }
 
     STATUS.unlink(missing_ok=True)
@@ -48,7 +50,8 @@ def build_windows(name, entry):
     print(f"Job: {job_id}")
     print("Waiting for Windows build...")
 
-    deadline = time.monotonic() + 300
+    deadline = time.monotonic() + 1800
+    last_message = None
 
     while time.monotonic() < deadline:
         if not STATUS.exists():
@@ -66,6 +69,11 @@ def build_windows(name, entry):
         if status.get("job_id") != job_id:
             time.sleep(1)
             continue
+
+        message = status.get("message")
+        if message and message != last_message:
+            print(message)
+            last_message = message
 
         state = status.get("state")
 
