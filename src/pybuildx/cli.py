@@ -17,9 +17,15 @@ def main():
         help="Initialize a PyBuildX project",
     )
 
-    subparsers.add_parser(
+    build_parser = subparsers.add_parser(
         "build",
         help="Build the application",
+    )
+
+    build_parser.add_argument(
+        "--target",
+        choices=["linux", "windows"],
+        help="Target operating system",
     )
 
     args = parser.parse_args()
@@ -28,7 +34,7 @@ def main():
         init_project()
 
     elif args.command == "build":
-        build()
+        build(target=args.target)
 
     else:
         parser.print_help()
