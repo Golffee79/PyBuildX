@@ -1,7 +1,9 @@
 from pathlib import Path
 import sys
 import tomllib
+
 from .runners.local import build_local
+from .runners.windows import build_windows
 
 
 def get_host_platform():
@@ -47,10 +49,13 @@ def build(target=None):
     print(f"Host: {host}")
     print(f"Target: {target}")
 
-    if target != host:
-        print()
-        print(f"Cannot build {target} locally from {host} yet.")
-        print("A remote/platform runner is required.")
+    if target == host:
+        build_local(name, entry)
         return
 
-    build_local(name, entry)
+    if host == "linux" and target == "windows":
+        build_windows(name, entry)
+        return
+
+    print()
+    print(f"No runner available for {host} -> {target}")
